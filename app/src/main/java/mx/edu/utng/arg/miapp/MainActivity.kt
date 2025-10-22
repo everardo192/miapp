@@ -9,14 +9,19 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
-import com.google.android.ads.mediationtestsuite.viewmodels.ViewModelFactory
 import mx.edu.utng.arg.miapp.data.local.database.AppDatabase
 import mx.edu.utng.arg.miapp.data.repository.MovieRepository
+import mx.edu.utng.arg.miapp.ui.screens.DetailScreen
+import mx.edu.utng.arg.miapp.ui.screens.FavoritesScreen
 import mx.edu.utng.arg.miapp.ui.screens.HomeScreen
+import mx.edu.utng.arg.miapp.ui.screens.SearchScreen
+import mx.edu.utng.arg.miapp.ui.theme.MovieExplorerTheme
 import mx.edu.utng.arg.miapp.ui.viewmodel.MovieViewModel
 
 class MainActivity : ComponentActivity() {
@@ -36,17 +41,34 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+/**
+ * Composable que crea y recuerda el ViewModelFactory
+ * configurado con todas las dependencias necesarias
+ */
+@Composable
+fun rememberViewModelFactory(): ViewModelProvider.Factory {
+    val context = LocalContext.current
+    val database = remember { AppDatabase.getInstance(context) }
+    val repository = remember { MovieRepository(database.favoriteDao()) }
+
+    return remember {
+        object : ViewModelProvider.Factory {
+            @Suppress("UNCHECKED_CAST")
+            override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
+                if (modelClass.isAssignableFrom(MovieViewModel::class.java)) {
+                    return MovieViewModel(repository) as T
+                }
+                throw IllegalArgumentException("Unknown ViewModel class: ${modelClass.name}")
+            }
+        }
+    }
+}
+
 @Composable
 fun MovieExplorerApp() {
     val navController = rememberNavController()
-    val database = AppDatabase.getInstance(androidx.compose.ui.platform.LocalContext.current)
-    val repository = MovieRepository(database.favoriteDao())
-    val viewModel: MovieViewModel = viewModel(
-        factory = androidx.lifecycle.ViewModelFactory(
-            application = androidx.compose.ui.platform.LocalContext.current.applicationContext as android.app.Application,
-            repository = repository
-        )
-    )
+    val factory = rememberViewModelFactory()
+    val viewModel: MovieViewModel = viewModel(factory = factory)
 
     NavHost(
         navController = navController,
@@ -59,10 +81,7 @@ fun MovieExplorerApp() {
                     navController.navigate("detail/$movieId")
                 },
                 onFavoriteClick = { movieId, isFavorite ->
-                    if (isFavorite) {
-                        // La lógica de agregar/quitar favoritos se maneja en el ViewModel
-                        // a través de los callbacks en los componentes
-                    } else {
+                    if (!isFavorite) {
                         viewModel.removeFromFavorites(movieId)
                     }
                 }
@@ -76,9 +95,7 @@ fun MovieExplorerApp() {
                     navController.navigate("detail/$movieId")
                 },
                 onFavoriteClick = { movieId, isFavorite ->
-                    if (isFavorite) {
-                        // Similar a home screen
-                    } else {
+                    if (!isFavorite) {
                         viewModel.removeFromFavorites(movieId)
                     }
                 }
@@ -107,19 +124,5 @@ fun MovieExplorerApp() {
                 onBackClick = { navController.popBackStack() }
             )
         }
-    }
-}
-
-// Factory para ViewModel
-class ViewModelFactory(
-    private val application: android.app.Application,
-    private val repository: MovieRepository
-) : androidx.lifecycle.ViewModelProvider.Factory {
-    @Suppress("UNCHECKED_CAST")
-    override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
-        if (modelClass.isAssignableFrom(MovieViewModel::class.java)) {
-            return MovieViewModel(repository) as T
-        }
-        throw IllegalArgumentException("Unknown ViewModel class")
     }
 }
